@@ -1,9 +1,13 @@
+// Felipe Ryan - yep the variable, etc naming in here is meant as a "tongue in cheek"
+// collection of D&D nerdyness.
+
 package dungeonclient
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
@@ -14,6 +18,7 @@ import (
 )
 
 var fileName string
+var dungeonMasterMode = false
 
 type message struct {
 	Action    string `json:"action"`
@@ -37,13 +42,15 @@ func createMessage(command string) message {
 		return message{Action: "list", Payload: "", Recipient: ""}
 	case "/file":
 		return message{Action: "file", Payload: tokens[1], Recipient: ""}
+	case "/audio":
+		return message{Action: "audio", Payload: tokens[1], Recipient: ""}
 	}
 
 	return message{Action: "say", Payload: action, Recipient: "all"}
 
 }
 
-func decodeMessage(received []byte) {
+func decodeMessage(received []byte, messageToUI chan interface{}) {
 	m := &message{}
 	if err := json.Unmarshal(received, m); err != nil {
 		log.Println("error unmarshalling: ", err)
@@ -52,43 +59,89 @@ func decodeMessage(received []byte) {
 	switch m.Action {
 	case "say":
 		fmt.Printf("%s -> %s \n", m.Sender, m.Payload)
+		if !dungeonMasterMode {
+			messageToUI <- m.Payload
+		}
 	case "file":
 		fileName = m.Payload
 	}
 
 }
 
-func writeFile(message []byte, fileName string) {
-	f, err := os.Create(fileName)
+func sendMessage(rawMessage string, connection *websocket.Conn) error {
+	msg := createMessage(rawMessage)
+	packet, err := json.Marshal(msg)
 	if err != nil {
-		log.Printf("error creating file: %s\n", err)
-		return
+		log.Println("write:", err)
+		return err
 	}
-	defer f.Close()
 
-	w := bufio.NewWriter(f)
-	n4, err := w.Write(message)
-	if err != nil {
-		log.Printf("error writing file: %s\n", err)
-		return
+	//test for special case, audio will be sent as a binary
+	if msg.Action == "audio" {
+		dat, err := ioutil.ReadFile(msg.Payload)
+		if err != nil {
+			log.Printf("Error opening file: %s\n", err)
+			return err
+		}
+		err = connection.WriteMessage(websocket.BinaryMessage, dat)
+		if err != nil {
+			log.Println("write:", err)
+			return err
+		}
+		return nil
 	}
-	log.Printf("Wrote %d bytes\n", n4)
-	w.Flush()
+
+	err = connection.WriteMessage(websocket.TextMessage, []byte(packet))
+	if err != nil {
+		log.Println("write:", err)
+		return err
+	}
+	return nil
 }
 
-func RunClient(serverAddress, mode string, interrupt chan os.Signal) {
+func RunClient(serverAddress, mode string, interrupt chan os.Signal,
+	waiting chan bool, fromUI chan interface{}, toUI chan interface{}, audioToUI chan interface{}) {
 
-	u := url.URL{Scheme: "ws", Host: serverAddress, Path: "/receive"}
+	connectTo := serverAddress
+	if mode != "dm" {
+		fmt.Println("blocking on fromUI channel")
+		select {
+		case textFromUI := <-fromUI: // server address
+			connectTo = fmt.Sprintf("%v", textFromUI)
+		case <-interrupt:
+			close(waiting)
+			return
+		}
+
+	}
+
+	u := url.URL{Scheme: "ws", Host: connectTo, Path: "/receive"}
 	log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Fatal("dial:", err)
+		log.Fatal("error connecting:", err)
 	}
 	defer c.Close()
 
+	toUI <- "Connected to Server"
+
 	done := make(chan struct{})
 
+	// this goroutine pings every 45 seconds to keep the connection alive on Heroku
+	go func() {
+		for {
+			select {
+			case <-time.After(30 * time.Second):
+				err := c.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second))
+				if err != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	// this goroutine receives messages from the websocket
 	go func() {
 		defer close(done)
 		for {
@@ -98,18 +151,20 @@ func RunClient(serverAddress, mode string, interrupt chan os.Signal) {
 				return
 			}
 			if msgType == websocket.TextMessage {
-				decodeMessage(msg)
+				decodeMessage(msg, toUI)
 			}
 			if msgType == websocket.BinaryMessage {
-				if fileName != "" {
-					writeFile(msg, "example.mp3")
-					fileName = ""
+				if !dungeonMasterMode {
+					// send bytes to audio channel for UI to pick up and play
+					audioToUI <- msg
 				}
 			}
 		}
 	}()
 
+	// this goroutine reads messages from stdin so the DM can send commands
 	if mode == "dm" {
+		dungeonMasterMode = true
 		fmt.Print("*** Welcome master! ***\n")
 		reader := bufio.NewReader(os.Stdin)
 		go func() {
@@ -118,14 +173,7 @@ func RunClient(serverAddress, mode string, interrupt chan os.Signal) {
 				// convert CRLF to LF
 				text = strings.Replace(text, "\n", "", -1)
 
-				msg := createMessage(text)
-				packet, err := json.Marshal(msg)
-				if err != nil {
-					log.Println("write:", err)
-					return
-				}
-
-				err = c.WriteMessage(websocket.TextMessage, []byte(packet))
+				err := sendMessage(text, c)
 				if err != nil {
 					log.Println("write:", err)
 					return
@@ -134,11 +182,21 @@ func RunClient(serverAddress, mode string, interrupt chan os.Signal) {
 		}()
 	}
 
+	// this for-loop selects on different channels
 	for {
 		select {
-		case <-done:
+		case textFromUI := <-fromUI: // atm only used for the /setname coming from the UI
+			err := sendMessage(fmt.Sprintf("%v", textFromUI), c)
+			if err != nil {
+				log.Println("write:", err)
+				return
+			}
+		case <-done: // Probably because the server closed the connection
+			fmt.Println("Looks like the server closed the connection")
+			close(waiting)
 			return
 		case <-interrupt:
+			// Prob a ctrl+c or window close
 			// Cleanly close the connection by sending a close message and then
 			// waiting (with timeout) for the server to close the connection.
 			log.Println("interrupt")
@@ -151,6 +209,7 @@ func RunClient(serverAddress, mode string, interrupt chan os.Signal) {
 			case <-done:
 			case <-time.After(time.Second):
 			}
+			close(waiting)
 			return
 		}
 	}
