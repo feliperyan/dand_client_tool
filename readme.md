@@ -3,7 +3,7 @@
 
 > 🚨This project was a fun way for me to get more comfortable with Golang and most of all to grok Go routines and channels. It's very much in the _make it work_ phase 🍝 of the "make it work -> make it right -> make it fast" concept.
 
-![GitHub Logo](screenshot.png)
+![GitHub Logo](animated.gif)
 
 ### First deploy the server somewhere, [here is the repo](https://github.com/feliperyan/dand_server_tool)
 
