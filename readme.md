@@ -1,7 +1,9 @@
 # D&D DM Remote Tool 🧙
-## Client app to connect to the D&D websocket server (separate repo) to play streaming MP3s and receive messages in a classic UI of such poor taste it's kinda cool.
+## Client app to connect to the D&D [websocket server](https://github.com/feliperyan/dand_server_tool) to play streaming MP3s and receive messages in a classic UI of such poor taste it's kinda cool.
 
 > 🚨This project was a fun way for me to get more comfortable with Golang and most of all to grok Go routines and channels. It's very much in the _make it work_ phase 🍝 of the "make it work -> make it right -> make it fast" concept.
+
+### First deploy the server somewhere, [here is the repo](https://github.com/feliperyan/dand_server_tool)
 
 ### Regular players
 Start up the executable, enter the servername and hit enter, then enter your player name and hit enter.
