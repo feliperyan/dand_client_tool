@@ -19,3 +19,5 @@ You have acess to the following commands, which must be started with a ```/``` b
 - ```/whisper <playerName>``` sends a message just to that specific player.
 - ```<text>``` broadcasts a message to all players.
 
+> This little repo would not be possible without the work by Hajime Hoshi and the [Ebiten](https://github.com/hajimehoshi/ebiten) Go package.
+
