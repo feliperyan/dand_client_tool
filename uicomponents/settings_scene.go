@@ -80,7 +80,7 @@ func NewSettingsScene() *SettingsScene {
 
 	boxWidth := 300
 	horizontalPos := (ScreenWidth - boxWidth) / 2
-	setScene.serverAddressBox = createInputText(horizontalPos, 60, boxWidth, 48, "go-dand-server.herokuapp.com", 36)
+	setScene.serverAddressBox = createInputText(horizontalPos, 60, boxWidth, 48, "", 36)
 	setScene.serverAddressBox.hasFocus = true
 
 	setScene.nameBox = createInputText(horizontalPos, 220, boxWidth, 48, "", 36)

@@ -29,6 +29,8 @@ var audioContext *audio.Context
 var audioPlayer *audio.Player
 
 const logoMoveMax int = 64
+const titleString = "DUNGEONS & DRAGONS"
+const subtitleString = "Jogatina de Sao Nunca"
 
 func init() {
 	// img, _, err := ebitenutil.NewImageFromFile("smaug_par_david_demaret.jpg", ebiten.FilterDefault)
@@ -83,10 +85,10 @@ func (s *TitleScene) Update(state *GameState) error {
 
 func (s *TitleScene) Draw(r *ebiten.Image) {
 	s.drawTitleBackground(r, s.count)
-	drawLogo(r, "DUNGEONS & DRAGONS")
+	drawLogo(r, titleString)
 
 	if logoMove >= 64 {
-		drawSubtitle(r, "Jogatina de Sao Nunca")
+		drawSubtitle(r, subtitleString)
 	}
 	if subtitleMove >= 112 {
 		drawSpacebarCallout(r, "PRESS SPACEBAR TO START")
