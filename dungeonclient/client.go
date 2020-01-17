@@ -44,6 +44,8 @@ func createMessage(command string) message {
 		return message{Action: "file", Payload: tokens[1], Recipient: ""}
 	case "/audio":
 		return message{Action: "audio", Payload: tokens[1], Recipient: ""}
+	case "/d":
+		return message{Action: "d", Payload: "", Recipient: ""}
 	}
 
 	return message{Action: "say", Payload: action, Recipient: "all"}
